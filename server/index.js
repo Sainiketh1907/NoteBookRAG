@@ -145,7 +145,9 @@ const __dirname = path.dirname(__filename);
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../dist')));
 
-app.get('*', (req, res) => {
+// Catch-all route to serve the frontend for any non-API request
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
