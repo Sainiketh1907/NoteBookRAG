@@ -1,3 +1,5 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -135,9 +137,6 @@ Be precise, helpful, and concise. Do not use outside knowledge.`;
     res.status(500).json({ error: error.message || "Failed to generate answer." });
   }
 });
-
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
