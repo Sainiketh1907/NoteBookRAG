@@ -6,6 +6,7 @@ NotebookRAG is a full-stack, secure RAG (Retrieval-Augmented Generation) applica
 
 - **Document Ingestion**: Supports PDF, TXT, MD, and CSV files.
 - **RAG Pipeline**: Efficiently chunks documents and builds a local vector index using **HNSWLib**.
+- **Corrective RAG (CRAG)**: Evaluates retrieved context and automatically falls back to Wikipedia search if local documents cannot answer the question.
 - **Smart Embeddings**: Uses high-performance embeddings via **Hugging Face Inference API**.
 - **Secure Architecture**: All AI processing and API keys are managed on a Node.js/Express backend to prevent client-side exposure.
 - **Modern UI**: A sleek, responsive React interface built with Vite, featuring custom assets and smooth transitions.
@@ -17,6 +18,7 @@ NotebookRAG is a full-stack, secure RAG (Retrieval-Augmented Generation) applica
 - **Backend**: Node.js, Express
 - **AI/LLM**: OpenRouter (Nvidia Nemotron), Hugging Face (Inference API)
 - **Vector Store**: HNSWLib (local, in-process)
+- **External Search**: Wikipedia API (for Corrective RAG fallback)
 - **Orchestration**: LangChain
 
 ## 🚀 Getting Started

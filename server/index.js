@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 import dotenv from 'dotenv';
+import google from 'googlethis';
 import { Document } from '@langchain/core/documents';
 
 function chunkText(text, chunkSize = 600, overlap = 100) {
@@ -100,16 +101,81 @@ app.post('/api/chat', async (req, res) => {
 
     const retriever = vectorStore.asRetriever({ k: 4 });
     const retrievedDocs = await retriever.invoke(query);
-    const contextStr = retrievedDocs.map(d => d.pageContent).join("\n\n");
-    
-    const systemPrompt = `You are a document assistant. Answer questions ONLY using the provided document context. 
-If the answer isn't in the context, say "I couldn't find that in the document."
+    let contextStr = retrievedDocs.map(d => d.pageContent).join("\n\n");
+    let chunks = retrievedDocs.map(d => d.pageContent);
+
+    // 2. Evaluate Retrieval (CRAG Step)
+    let webSearchUsed = false;
+    let evaluation = "Ambiguous"; // Default
+
+    const evalMessages = [
+      { role: "system", content: "You are an evaluator for a Retrieval-Augmented Generation system. Your job is to assess whether the provided document context contains sufficient and relevant information to answer the user's question. Reply strictly with one word: 'Correct', 'Incorrect', or 'Ambiguous'." },
+      { role: "user", content: `Context:\n${contextStr}\n\nQuestion: ${query}` }
+    ];
+
+    try {
+      const evalResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "nvidia/nemotron-3-super-120b-a12b:free",
+          messages: evalMessages,
+          temperature: 0.1
+        })
+      });
+      const evalData = await evalResponse.json();
+      if (evalData.choices && evalData.choices[0] && evalData.choices[0].message) {
+        const reply = evalData.choices[0].message.content.trim().toLowerCase();
+        if (reply.includes("correct") && !reply.includes("incorrect")) {
+          evaluation = "Correct";
+        } else if (reply.includes("incorrect")) {
+          evaluation = "Incorrect";
+        }
+      }
+    } catch (err) {
+      console.warn("Evaluation failed, proceeding with Ambiguous state", err);
+    }
+
+    // 3. Fallback Web Search if not strictly Correct
+    if (evaluation !== "Correct") {
+      webSearchUsed = true;
+      try {
+        const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.query && data.query.search && data.query.search.length > 0) {
+          const results = data.query.search.slice(0, 3);
+          const searchContext = results.map(r => r.title + " - " + r.snippet.replace(/<[^>]+>/g, '')).join("\n\n");
+          const searchChunks = results.map(r => "[Wikipedia] " + r.title + ": " + r.snippet.replace(/<[^>]+>/g, ''));
+          
+          if (evaluation === "Incorrect") {
+             // Replace completely
+             contextStr = "Wikipedia Results:\n" + searchContext;
+             chunks = searchChunks;
+          } else {
+             // Ambiguous: Augment
+             contextStr += "\n\nWikipedia Results:\n" + searchContext;
+             chunks = [...chunks, ...searchChunks];
+          }
+        }
+      } catch (err) {
+        console.warn("Web search failed", err);
+      }
+    }
+
+    // 4. Generate Answer
+    const systemPrompt = `You are a document assistant. Answer questions ONLY using the provided context (which may include web search results if local documents were insufficient). 
+If the answer isn't in the context, say "I couldn't find that in the context."
 Be precise, helpful, and concise. Do not use outside knowledge.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
       ...history,
-      { role: "user", content: `Document context:\n\n${contextStr}\n\n---\nQuestion: ${query}` }
+      { role: "user", content: `Context:\n\n${contextStr}\n\n---\nQuestion: ${query}` }
     ];
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -129,7 +195,8 @@ Be precise, helpful, and concise. Do not use outside knowledge.`;
 
     res.json({ 
       answer: data.choices[0].message.content,
-      chunks: retrievedDocs.map(d => d.pageContent) 
+      chunks: chunks,
+      webSearchUsed: webSearchUsed
     });
 
   } catch (error) {

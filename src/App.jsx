@@ -726,6 +726,7 @@ export default function NotebookLM() {
         role: "assistant",
         content: data.answer,
         retrievedChunks: data.chunks.map(c => ({ chunk: c })),
+        webSearchUsed: data.webSearchUsed,
         id: Date.now() + 1
       };
       setMessages(prev => [...prev, assistantMsg]);
@@ -888,7 +889,11 @@ export default function NotebookLM() {
                         <span key={i}>{line}{i < msg.content.split("\n").length - 1 && <br/>}</span>
                       ))}
                     </div>
-
+                    {msg.webSearchUsed && (
+                      <div style={{ fontSize: '11px', color: 'var(--amber)', marginTop: '6px', fontFamily: 'var(--mono)' }}>
+                        🔍 Web search used
+                      </div>
+                    )}
                   </div>
                 </div>
               )
